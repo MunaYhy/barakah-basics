@@ -2,19 +2,145 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --font-quicksand: 'Quicksand', sans-serif;
+    --font-amiri: 'Amiri', serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-quicksand);
+    @apply bg-gpaper text-ink dark:bg-gray-950 dark:text-gray-100;
+    min-height: 100vh;
+  }
+
+  input, textarea, button {
+    font-family: var(--font-quicksand);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-line rounded-full; }
+}
+
 @layer components {
+  /* Section label */
+  .sec-label {
+    @apply text-xs font-extrabold uppercase tracking-widest text-gm dark:text-gl
+           flex items-center gap-2 mb-3;
+  }
+  .sec-label::after {
+    content: '';
+    @apply flex-1 h-px bg-line dark:bg-gd;
+  }
+
+  /* Card */
   .card {
-    @apply bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-line dark:border-gray-800;
+    @apply bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-line dark:border-gray-800
+           overflow-hidden;
   }
+
+  /* Section card (with left accent) */
+  .sec-card {
+    @apply card border-l-4 border-l-gm dark:border-l-gl p-4 mb-3;
+  }
+
+  /* Nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
+           text-inks dark:text-gray-400 hover:bg-gp dark:hover:bg-gray-800
+           transition-all duration-150 cursor-pointer;
+  }
+  .nav-item.active {
+    @apply bg-gp dark:bg-gray-800 text-gd dark:text-gl;
+  }
+
+  /* Green button */
   .btn-green {
-    @apply bg-gm hover:bg-gd text-white font-bold rounded-xl py-3 px-5 transition-colors;
+    @apply bg-gm hover:bg-gd text-white font-bold rounded-xl px-4 py-2
+           transition-colors duration-150 text-sm;
   }
+
+  /* Ghost button */
   .btn-ghost {
-    @apply bg-gp dark:bg-gray-800 hover:bg-line text-gd dark:text-gl font-bold rounded-xl py-3 px-5 transition-colors;
+    @apply border-2 border-gl text-gm hover:bg-gp dark:text-gl dark:hover:bg-gray-800
+           font-bold rounded-xl px-4 py-2 transition-colors duration-150 text-sm;
   }
+
+  /* Input */
   .inp {
-    @apply w-full rounded-xl border border-line dark:border-gray-700 bg-white dark:bg-gray-800
-           text-ink dark:text-gray-100 p-3 text-sm font-semibold outline-none
-           focus:ring-2 focus:ring-gl focus:border-gl placeholder-inks/50;
+    @apply w-full border border-line dark:border-gray-700 rounded-xl px-3 py-2
+           text-sm font-semibold text-ink dark:text-gray-100
+           bg-white dark:bg-gray-800 outline-none
+           focus:border-gm dark:focus:border-gl transition-colors;
+  }
+
+  /* Habit row */
+  .habit-row {
+    @apply flex items-center gap-2 px-3 py-2.5 rounded-xl border-l-4 border-l-gm
+           bg-gp dark:bg-gray-800/60 dark:border-l-gl
+           cursor-pointer select-none transition-all duration-150;
+  }
+  .habit-row.checked {
+    @apply bg-gl/40 border-l-gd dark:bg-gl/20;
+  }
+
+  /* Circle checkbox */
+  .circle-check {
+    @apply w-5 h-5 rounded-full border-2 border-gdot dark:border-gray-600
+           bg-white dark:bg-gray-900 flex-shrink-0 flex items-center justify-center
+           text-xs text-white transition-all duration-200;
+  }
+  .circle-check.checked {
+    @apply bg-gd border-gd;
+  }
+
+  /* Prayer dot */
+  .prayer-dot {
+    @apply w-7 h-7 rounded-full border-2 border-gdot dark:border-gray-600
+           bg-white dark:bg-gray-800 cursor-pointer flex items-center justify-center
+           text-xs font-black text-white transition-all duration-200;
+  }
+  .prayer-dot.done {
+    @apply bg-gm border-gd;
+  }
+
+  /* Mood button */
+  .mood-btn {
+    @apply text-2xl p-1 rounded-full border-2 border-transparent
+           cursor-pointer transition-all duration-150
+           hover:scale-110 hover:border-gl;
+  }
+  .mood-btn.selected {
+    @apply border-gd bg-gp dark:bg-gd/30 scale-110;
+  }
+
+  /* Water cup */
+  .water-cup {
+    @apply cursor-pointer transition-transform duration-150 hover:scale-110;
+  }
+
+  /* Progress bar */
+  .progress-bar-fill {
+    @apply h-full rounded-full bg-gradient-to-r from-gl to-gm transition-all duration-500 ease-out;
+  }
+
+  /* Tag chip */
+  .tag-chip {
+    @apply text-xs font-bold px-3 py-1 rounded-full border-2 border-line
+           dark:border-gray-700 text-inks dark:text-gray-400
+           cursor-pointer transition-all duration-150
+           hover:border-gm hover:text-gm dark:hover:border-gl dark:hover:text-gl;
+  }
+  .tag-chip.selected {
+    @apply bg-gm border-gm text-white dark:bg-gl dark:border-gl dark:text-gd;
+  }
+
+  /* Star button */
+  .star-btn {
+    @apply text-2xl cursor-pointer transition-transform duration-100 hover:scale-125;
   }
 }
