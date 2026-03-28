@@ -1,7 +1,8 @@
 'use client'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { lsGet, lsSet, KEYS } from '@/lib/storage'
 import { DEFAULT_HABITS, type HabitGroup } from '@/lib/data'
+import { supabase, getAnonId } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,10 @@ export function useStore() {
   const [rewards, setRewardsState] = useState<Record<number, RewardData>>({})
   const [hydrated, setHydrated] = useState(false)
 
-  // Load from localStorage once on mount
+  const anonIdRef = useRef<string | null>(null)   // Supabase auth.uid()
+  const userIdRef = useRef<string | null>(null)    // bj_profiles.id
+
+  // Load from localStorage once on mount, then sync Supabase in background
   useEffect(() => {
     const cfg = lsGet<Config | null>(KEYS.config, null)
     const d = lsGet<Record<string, DayData>>(KEYS.daily, {})
@@ -94,10 +98,82 @@ export function useStore() {
     setMeasurementsState(m)
     setWeeklyState(wr)
     setRewardsState(rw)
-    // Apply dark mode
     if (cfg?.darkMode) document.documentElement.classList.add('dark')
     setHydrated(true)
+
+    // Init Supabase in background (non-blocking)
+    initDb()
   }, [])
+
+  const initDb = async () => {
+    const anonId = await getAnonId()
+    if (!anonId) return
+    anonIdRef.current = anonId
+
+    // Look up existing profile
+    const { data: profile } = await supabase
+      .from('bj_profiles')
+      .select('id, start_date, start_weight, dark_mode')
+      .eq('anon_id', anonId)
+      .single()
+
+    if (!profile) return // New user — profile created on saveConfig (onboarding)
+    userIdRef.current = profile.id
+
+    // Load all data from Supabase (takes precedence over localStorage)
+    const [dailyRes, habitsRes, weightRes, measureRes, weeklyRes, rewardRes] = await Promise.all([
+      supabase.from('bj_daily').select('date, data').eq('user_id', profile.id),
+      supabase.from('bj_habits').select('habits').eq('user_id', profile.id).maybeSingle(),
+      supabase.from('bj_weight').select('milestone, weight').eq('user_id', profile.id),
+      supabase.from('bj_measurements').select('milestone, data').eq('user_id', profile.id),
+      supabase.from('bj_weekly').select('week, stars, well, impr, focus, quote').eq('user_id', profile.id),
+      supabase.from('bj_rewards').select('week, selected_tag, custom, done').eq('user_id', profile.id),
+    ])
+
+    if (dailyRes.data?.length) {
+      const merged: Record<string, DayData> = {}
+      for (const row of dailyRes.data) merged[row.date] = row.data as DayData
+      setDailyState(merged)
+      lsSet(KEYS.daily, merged)
+    }
+
+    if (habitsRes.data?.habits) {
+      setHabitsState(habitsRes.data.habits as HabitGroup[])
+      lsSet(KEYS.habits, habitsRes.data.habits)
+    }
+
+    if (weightRes.data?.length) {
+      const w: Record<number, number> = {}
+      for (const row of weightRes.data) w[row.milestone] = row.weight
+      setWeightState(w)
+      lsSet(KEYS.weight, w)
+    }
+
+    if (measureRes.data?.length) {
+      const m: Record<number, Measurements> = {}
+      for (const row of measureRes.data) m[row.milestone] = row.data as Measurements
+      setMeasurementsState(m)
+      lsSet(KEYS.measurements, m)
+    }
+
+    if (weeklyRes.data?.length) {
+      const wr: Record<number, WeekReview> = {}
+      for (const row of weeklyRes.data) {
+        wr[row.week] = { stars: row.stars, well: row.well, impr: row.impr, focus: row.focus, quote: row.quote }
+      }
+      setWeeklyState(wr)
+      lsSet(KEYS.weekly, wr)
+    }
+
+    if (rewardRes.data?.length) {
+      const rw: Record<number, RewardData> = {}
+      for (const row of rewardRes.data) {
+        rw[row.week] = { selectedTag: row.selected_tag, custom: row.custom, done: row.done }
+      }
+      setRewardsState(rw)
+      lsSet(KEYS.rewards, rw)
+    }
+  }
 
   // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -106,14 +182,30 @@ export function useStore() {
     lsSet(KEYS.config, c)
     if (c.darkMode) document.documentElement.classList.add('dark')
     else document.documentElement.classList.remove('dark')
+
+    // Upsert profile in Supabase (creates on first save, updates on subsequent)
+    if (anonIdRef.current) {
+      supabase.from('bj_profiles').upsert({
+        anon_id: anonIdRef.current,
+        start_date: c.startDate,
+        start_weight: c.startWeight,
+        dark_mode: c.darkMode,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'anon_id' }).select('id').single().then(({ data }: { data: { id: string } | null }) => {
+        if (data) userIdRef.current = data.id
+      })
+    }
   }, [])
 
   const toggleDarkMode = useCallback(() => {
-    setConfigState(prev => {
+    setConfigState((prev: Config | null) => {
       if (!prev) return prev
       const next = { ...prev, darkMode: !prev.darkMode }
       lsSet(KEYS.config, next)
       document.documentElement.classList.toggle('dark', next.darkMode)
+      if (userIdRef.current) {
+        supabase.from('bj_profiles').update({ dark_mode: next.darkMode, updated_at: new Date().toISOString() }).eq('id', userIdRef.current)
+      }
       return next
     })
   }, [])
@@ -125,10 +217,18 @@ export function useStore() {
   }, [daily])
 
   const updateDay = useCallback((key: string, updater: (d: DayData) => DayData) => {
-    setDailyState(prev => {
+    setDailyState((prev: Record<string, DayData>) => {
       const cur = prev[key] ?? defaultDayData()
       const next = { ...prev, [key]: updater(cur) }
       lsSet(KEYS.daily, next)
+      if (userIdRef.current) {
+        supabase.from('bj_daily').upsert({
+          user_id: userIdRef.current,
+          date: key,
+          data: next[key],
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,date' })
+      }
       return next
     })
   }, [])
@@ -138,14 +238,29 @@ export function useStore() {
   const saveHabits = useCallback((h: HabitGroup[]) => {
     setHabitsState(h)
     lsSet(KEYS.habits, h)
+    if (userIdRef.current) {
+      supabase.from('bj_habits').upsert({
+        user_id: userIdRef.current,
+        habits: h,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+    }
   }, [])
 
   // ── Weight ─────────────────────────────────────────────────────────────────
 
   const saveWeight = useCallback((milestone: number, val: number) => {
-    setWeightState(prev => {
+    setWeightState((prev: Record<number, number>) => {
       const next = { ...prev, [milestone]: val }
       lsSet(KEYS.weight, next)
+      if (userIdRef.current) {
+        supabase.from('bj_weight').upsert({
+          user_id: userIdRef.current,
+          milestone,
+          weight: val,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,milestone' })
+      }
       return next
     })
   }, [])
@@ -153,12 +268,20 @@ export function useStore() {
   // ── Measurements ───────────────────────────────────────────────────────────
 
   const saveMeasurement = useCallback((milestone: number, label: string, val: string) => {
-    setMeasurementsState(prev => {
+    setMeasurementsState((prev: Record<number, Measurements>) => {
       const next = {
         ...prev,
         [milestone]: { ...(prev[milestone] ?? {}), [label]: val }
       }
       lsSet(KEYS.measurements, next)
+      if (userIdRef.current) {
+        supabase.from('bj_measurements').upsert({
+          user_id: userIdRef.current,
+          milestone,
+          data: next[milestone],
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,milestone' })
+      }
       return next
     })
   }, [])
@@ -166,9 +289,21 @@ export function useStore() {
   // ── Weekly review ──────────────────────────────────────────────────────────
 
   const saveWeekly = useCallback((week: number, data: WeekReview) => {
-    setWeeklyState(prev => {
+    setWeeklyState((prev: Record<number, WeekReview>) => {
       const next = { ...prev, [week]: data }
       lsSet(KEYS.weekly, next)
+      if (userIdRef.current) {
+        supabase.from('bj_weekly').upsert({
+          user_id: userIdRef.current,
+          week,
+          stars: data.stars,
+          well: data.well,
+          impr: data.impr,
+          focus: data.focus,
+          quote: data.quote,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,week' })
+      }
       return next
     })
   }, [])
@@ -176,9 +311,19 @@ export function useStore() {
   // ── Rewards ────────────────────────────────────────────────────────────────
 
   const saveReward = useCallback((week: number, data: RewardData) => {
-    setRewardsState(prev => {
+    setRewardsState((prev: Record<number, RewardData>) => {
       const next = { ...prev, [week]: data }
       lsSet(KEYS.rewards, next)
+      if (userIdRef.current) {
+        supabase.from('bj_rewards').upsert({
+          user_id: userIdRef.current,
+          week,
+          selected_tag: data.selectedTag,
+          custom: data.custom,
+          done: data.done,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,week' })
+      }
       return next
     })
   }, [])
