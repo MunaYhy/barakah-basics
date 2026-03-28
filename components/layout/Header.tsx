@@ -9,7 +9,7 @@ type Props = {
 }
 
 export default function Header({ config, viewDate, onChangeDate }: Props) {
-  const start = new Date(config.startDate)
+  const start = new Date(config.startDate + 'T00:00:00')
   const dayNum = dayNumber(start, viewDate)
   const pct = progressPercent(dayNum)
 
