@@ -99,6 +99,11 @@ export function useStore() {
     setWeeklyState(wr)
     setRewardsState(rw)
     if (cfg?.darkMode) document.documentElement.classList.add('dark')
+
+    // Restore cached userId immediately so saves work right away
+    const cachedUserId = lsGet<string | null>('bj_uid', null)
+    if (cachedUserId) userIdRef.current = cachedUserId
+
     setHydrated(true)
 
     // Init Supabase in background (non-blocking)
@@ -183,18 +188,24 @@ export function useStore() {
     if (c.darkMode) document.documentElement.classList.add('dark')
     else document.documentElement.classList.remove('dark')
 
-    // Upsert profile in Supabase (creates on first save, updates on subsequent)
-    if (anonIdRef.current) {
-      supabase.from('bj_profiles').upsert({
-        anon_id: anonIdRef.current,
+    // Upsert profile — call getAnonId() directly so we don't depend on the ref being ready
+    getAnonId().then(anonId => {
+      if (!anonId) return
+      anonIdRef.current = anonId
+      return supabase.from('bj_profiles').upsert({
+        anon_id: anonId,
         start_date: c.startDate,
         start_weight: c.startWeight,
         dark_mode: c.darkMode,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'anon_id' }).select('id').single().then(({ data }: { data: { id: string } | null }) => {
-        if (data) userIdRef.current = data.id
-      })
-    }
+      }, { onConflict: 'anon_id' }).select('id').single()
+    }).then((res) => {
+      const id = (res as { data?: { id: string } } | undefined)?.data?.id
+      if (id) {
+        userIdRef.current = id
+        lsSet('bj_uid', id) // cache so it's instantly available on next page load
+      }
+    })
   }, [])
 
   const toggleDarkMode = useCallback(() => {
