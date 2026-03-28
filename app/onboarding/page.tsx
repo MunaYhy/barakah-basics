@@ -8,7 +8,10 @@ type Step = 'date' | 'weight' | 'welcome'
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState<Step>('date')
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })
   const [startWeight, setStartWeight] = useState('')
 
   const finishOnboarding = () => {
