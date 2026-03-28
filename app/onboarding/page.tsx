@@ -1,12 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { lsSet, KEYS } from '@/lib/storage'
+import { useStore } from '@/hooks/useStore'
 
 type Step = 'date' | 'weight' | 'welcome'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const store = useStore()
   const [step, setStep] = useState<Step>('date')
   const [startDate, setStartDate] = useState(() => {
     const d = new Date()
@@ -15,7 +16,7 @@ export default function OnboardingPage() {
   const [startWeight, setStartWeight] = useState('')
 
   const finishOnboarding = () => {
-    lsSet(KEYS.config, {
+    store.saveConfig({
       startDate,
       startWeight: parseFloat(startWeight) || 0,
       darkMode: false,
