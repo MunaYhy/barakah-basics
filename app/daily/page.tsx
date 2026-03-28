@@ -34,7 +34,7 @@ export default function DailyPage() {
 
   if (!store.hydrated || !store.config) return <LoadingSpinner />
 
-  const start = new Date(store.config.startDate)
+  const start = new Date(store.config.startDate + 'T00:00:00')
   const dk = dateKey(viewDate)
   const d = store.getDayData(dk)
   const dayNum = dayNumber(start, viewDate)
